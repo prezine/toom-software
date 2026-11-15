@@ -12,3 +12,11 @@ test/ui/shots
 .env
 test/ui/dist-account
 test/ui/dist-captions
+# signing material: never commit
+*.p12
+*.pfx
+*.key
+*.pem
+*.cer
+*.p8
+*.certSigningRequest

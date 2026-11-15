@@ -65,6 +65,19 @@ nsis:
   artifactName: Toom-Setup.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true
+# Microsoft Store package. Not part of the normal Windows build: the "Build for the Microsoft
+# Store" step in release.yml makes it (electron-builder --win appx), and Microsoft signs it after
+# certification, so it needs no certificate. identityName, publisher and publisherDisplayName come
+# from Partner Center → Product identity and are passed in from GitHub variables. Tile icons are in
+# build/appx. The Store updates the app itself (see src/main/updater.ts).
+appx:
+  artifactName: Toom-Store-${arch}.${ext}
+  applicationId: Toom
+  displayName: Toom
+  backgroundColor: transparent
+  languages: [en-US]
+  minVersion: 10.0.17763.0
+  maxVersionTested: 10.0.26100.0
 extraResources:
   - from: resources
     to: resources

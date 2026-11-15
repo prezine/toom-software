@@ -68,6 +68,11 @@ export async function initUpdater(busy: () => boolean): Promise<void> {
     set({ state: 'unsupported', reason: 'Updates are turned off in development builds.' })
     return
   }
+  // the Microsoft Store build is updated by the Store, not by us
+  if (process.windowsStore) {
+    set({ state: 'unsupported', reason: 'Toom updates through the Microsoft Store.' })
+    return
+  }
   if (process.platform === 'linux' && !process.env['APPIMAGE']) {
     set({ state: 'unsupported', reason: 'Update Toom with your package manager.' })
     return

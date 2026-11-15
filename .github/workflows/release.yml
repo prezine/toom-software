@@ -10,6 +10,11 @@
 #     TOOM_ENTITLEMENT_PUBLIC_KEY   public half of the API's entitlement key (lets Pro work offline)
 #     RELEASE_REPO                  optional: publish to another public repo (e.g. toom-releases),
 #                                   so this one can stay private. Needs RELEASES_TOKEN.
+#     STORE_IDENTITY_NAME, STORE_PUBLISHER, STORE_PUBLISHER_DISPLAY_NAME
+#                                   optional: the three "Product identity" values from Microsoft
+#                                   Partner Center. When set, the Windows job also builds the
+#                                   Microsoft Store package (artifact "toom-store"), which you
+#                                   upload in Partner Center. Needs version 1.0.0 or higher.
 #   Secrets (all optional; without them the builds are unsigned)
 #     RELEASES_TOKEN                a token with write access to RELEASE_REPO
 #     MAC_CERTIFICATE               base64 of a "Developer ID Application" .p12
@@ -110,6 +115,7 @@ jobs:
     timeout-minutes: 60
     env:
       HAS_CERT: ${{ secrets.WIN_CERTIFICATE != '' }}
+      HAS_STORE: ${{ vars.STORE_IDENTITY_NAME != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -135,6 +141,34 @@ jobs:
             dist/latest.yml
           if-no-files-found: error
           retention-days: 14
+      # The Microsoft Store package. Left unsigned on purpose: Microsoft signs it after
+      # certification. It is not attached to the GitHub release; download the "toom-store"
+      # artifact from this run and upload both files in Partner Center.
+      - name: Build for the Microsoft Store
+        if: env.HAS_STORE == 'true'
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          major=$(node -p "require('./package.json').version.split('.')[0]")
+          if [ "$major" = "0" ]; then
+            echo "::warning::Skipped the Microsoft Store package: the Store refuses versions that start with 0. Release 1.0.0 or higher."
+            exit 0
+          fi
+          npx electron-builder --win appx --x64 --arm64 --publish never \
+            -c.appx.identityName="$STORE_IDENTITY_NAME" \
+            -c.appx.publisher="$STORE_PUBLISHER" \
+            -c.appx.publisherDisplayName="$STORE_PUBLISHER_DISPLAY_NAME"
+      - uses: actions/upload-artifact@v4
+        if: env.HAS_STORE == 'true'
+        with:
+          name: toom-store
+          path: dist/*.appx
+          if-no-files-found: ignore
+          retention-days: 14
 
   publish:
     name: Publish the release
@@ -142,10 +176,15 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      # only the installers: the Store package (toom-store) goes to Partner Center, not here
       - uses: actions/download-artifact@v4
         with:
+          name: toom-mac
           path: release
-          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: toom-windows
+          path: release
       # nothing goes out unless every installer and update file is there
       - name: Check every file is there
         working-directory: release
