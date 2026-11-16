@@ -20,3 +20,4 @@ test/ui/dist-captions
 *.cer
 *.p8
 *.certSigningRequest
+electron-builder.env

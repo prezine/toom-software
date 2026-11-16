@@ -43,6 +43,26 @@ exports.default = async function notarize(context) {
   const zip = join(tmp, `Toom-${arch}.zip`)
   const log = (msg) => console.log(`  • notarize (${arch})  ${msg}`)
 
+  // Apple rejects anything not signed with a Developer ID certificate, with a long list of every
+  // binary in the app. Catch that here, before the upload, and say what is actually wrong.
+  const sig = await run('codesign', ['-dv', '--verbose=4', app]).then(
+    (out) => out,
+    (err) => String(err.stderr || err.message)
+  )
+  // codesign prints its details on stderr even when it succeeds
+  const details = sig || (await new Promise((resolve) => execFile('codesign', ['-dv', '--verbose=4', app], (_e, _o, stderr) => resolve(String(stderr)))))
+  if (!/Authority=Developer ID Application/.test(details)) {
+    const found = await run('security', ['find-identity', '-v', '-p', 'codesigning']).catch(() => '')
+    throw new Error(
+      `Toom.app was not signed with a "Developer ID Application" certificate, so Apple would reject it.\n` +
+        `Look further up this log for "skipped macOS application code signing": that line says why.\n` +
+        `Usual causes: CSC_LINK points at the wrong file or CSC_KEY_PASSWORD is wrong; the .p12 holds an\n` +
+        `"Apple Development" or "Mac App Distribution" certificate instead of "Developer ID Application";\n` +
+        `or the .p12 was exported without its private key.\n` +
+        `Signing certificates on this Mac:\n${found.trim() || '  (none)'}`
+    )
+  }
+
   try {
     log('signed; zipping the app for Apple')
     await run('ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', app, zip])
