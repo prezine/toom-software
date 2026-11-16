@@ -34,7 +34,11 @@ electronFuses:
 asarUnpack:
   - node_modules/uiohook-napi/**
   - node_modules/electron-liquid-glass/**
+# Notarization runs in scripts/notarize.cjs (after signing, before the .dmg and .zip are made):
+# it shows Apple's progress and has a time limit, unlike the built-in mac.notarize.
+afterSign: scripts/notarize.cjs
 mac:
+  notarize: false
   icon: build/icon.png
   category: public.app-category.video
   target:

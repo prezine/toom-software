@@ -129,6 +129,9 @@ const api = {
     /** stop using the account's key on one of its computers */
     licenseDeactivate: (deviceId: string): Promise<AccountResult> =>
       ipcRenderer.invoke('account:licenseDeactivate', deviceId),
+    /** take an account off the key (the owner: the other account; anyone else: themselves) */
+    licenseRemoveAccount: (userId: string): Promise<AccountResult> =>
+      ipcRenderer.invoke('account:licenseRemoveAccount', userId),
     cancelWaiting: (): Promise<AccountState> => ipcRenderer.invoke('account:cancelWaiting'),
     portal: (): Promise<AccountResult> => ipcRenderer.invoke('account:portal'),
     onChanged: (cb: (s: AccountState) => void) => on('account:changed', cb),

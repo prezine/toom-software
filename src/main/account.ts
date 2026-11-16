@@ -33,10 +33,20 @@ declare const __TOOM_ENTITLEMENT_PUBLIC_KEY__: string
 /** The live Toom API. Builds use it unless TOOM_API_URL says otherwise (http://localhost:8787 for a local toom-api). */
 const DEFAULT_API_URL = 'https://api.trytoom.tech'
 export const API_URL = (process.env['TOOM_API_URL'] || __TOOM_API_URL__ || DEFAULT_API_URL).replace(/\/+$/, '')
-const PUBLIC_KEY_PEM = (process.env['TOOM_ENTITLEMENT_PUBLIC_KEY'] || __TOOM_ENTITLEMENT_PUBLIC_KEY__ || '').replace(
-  /\\n/g,
-  '\n'
-)
+/**
+ * The key as pasted into .env, made into a clean PEM. Forgiving on purpose: quotes, "\\n" written
+ * out, everything on one line, or a mistyped BEGIN/END line all still work, because only the
+ * base64 body between the markers matters.
+ */
+export function normalisePublicKey(raw: string): string {
+  const body = raw
+    .replace(/\\n/g, '\n')
+    .replace(/-----[^-]*-----/g, '')
+    .replace(/[^A-Za-z0-9+/=]/g, '')
+  if (!body) return ''
+  return `-----BEGIN PUBLIC KEY-----\n${body.match(/.{1,64}/g)!.join('\n')}\n-----END PUBLIC KEY-----\n`
+}
+const PUBLIC_KEY_PEM = normalisePublicKey(process.env['TOOM_ENTITLEMENT_PUBLIC_KEY'] || __TOOM_ENTITLEMENT_PUBLIC_KEY__ || '')
 export const SCHEME = 'toom'
 
 /** without a signing key (development), trust the last answer from the server for this long offline */
@@ -144,7 +154,10 @@ function key(): KeyObject | null {
     try {
       publicKey = PUBLIC_KEY_PEM ? createPublicKey(PUBLIC_KEY_PEM) : null
     } catch (err) {
-      console.error('[account] bad entitlement public key', err)
+      console.error(
+        '[account] TOOM_ENTITLEMENT_PUBLIC_KEY in .env is not a valid key, so Pro can’t be verified offline. Copy it again from `npm run keys` in toom-api.',
+        (err as Error).message
+      )
       publicKey = null
     }
   }
@@ -523,6 +536,14 @@ export function registerAccountIpc(): void {
     setAccount(r.data)
     broadcast()
     if (!wasPro && accountState().plan === 'pro') emit({ type: 'upgraded' })
+    return { ok: true, state: accountState() }
+  })
+  // take an account off the key: the owner removes the other account, or the other account leaves
+  ipcMain.handle('account:licenseRemoveAccount', async (_e, userId: string): Promise<AccountResult> => {
+    const r = await call<ServerAccount>('POST', '/v1/license/accounts/remove', { userId })
+    if (!r.ok) return fail(r)
+    setAccount(r.data)
+    broadcast()
     return { ok: true, state: accountState() }
   })
   ipcMain.handle('account:licenseDeactivate', async (_e, device: string): Promise<AccountResult> => {

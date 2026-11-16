@@ -105,7 +105,7 @@ All shortcuts can be changed in **Settings → Shortcuts**.
 
 ## Free and Pro
 
-Toom is free to download and use. The free plan has every editing tool, with recordings up to 5 minutes, exports at 720p and a small "Made with Toom" mark. **Pro** removes all three: unlimited recording length, exports up to 4K at 60 fps and no watermark. Upgrade from **Settings → Account**.
+Toom is free to download and use. The free plan has every editing tool, with recordings up to 2 minutes, exports at 720p and a small "Made with Toom" mark. **Pro** removes all three: unlimited recording length, exports up to 4K at 60 fps and no watermark. Upgrade from **Settings → Account**.
 
 ## Updates
 

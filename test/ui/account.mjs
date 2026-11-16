@@ -305,6 +305,34 @@ try {
     (await page.evaluate(() => window.__portal)).includes('cust_ui'),
     'manage billing opens the Bachs portal for the customer'
   )
+  // ---- the licence key behind Pro: days left, and sharing it with one other account
+  const licKey = (await page.locator('code').first().textContent()).trim()
+  ok(/^[2-9A-Z]{5}(-[2-9A-Z]{5}){4}$/.test(licKey), 'the purchase comes with a licence key')
+  ok(/^\d+ days left$/.test((await page.getByTestId('license-days-left').textContent()).trim()), 'the key shows how many days it has left')
+  await page.getByText('Accounts (1 of 2)').waitFor()
+  const friendCall = async (method, p, body, token) => {
+    const res = await fetch(`http://127.0.0.1:${API_PORT}${p}`, {
+      method,
+      headers: { 'content-type': 'application/json', 'x-toom-device-id': 'fe'.repeat(32), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined
+    })
+    return res.json()
+  }
+  const friend = await friendCall('POST', '/v1/auth/signup', { email: 'friend-ui@example.com', password: 'correct horse battery' })
+  ok(friend.plan === 'free', 'a second account starts on Free')
+  const joined = await friendCall('POST', '/v1/license/activate', { key: licKey }, friend.token)
+  ok(joined.plan === 'pro' && joined.license.owner === false, 'entering the key on a second account gives it Pro')
+  ok(joined.license.daysLeft === (await friendCall('GET', '/v1/me', null, friend.token)).license.daysLeft && joined.license.daysLeft <= 7, 'the second account gets only the time left on the key')
+  await page.getByTitle('Refresh').click()
+  await page.getByText('Accounts (2 of 2)').waitFor()
+  await page.getByText('friend-ui@example.com').waitFor()
+  await page.waitForTimeout(300)
+  await shot('settings-license-shared.png')
+  await page.getByRole('button', { name: 'Remove', exact: true }).click()
+  await page.getByRole('button', { name: 'Remove', exact: true }).click()
+  await page.getByText('Accounts (1 of 2)').waitFor()
+  ok((await friendCall('GET', '/v1/me', null, friend.token)).plan === 'free', 'the owner removes the other account, which returns to Free')
+
   await page.getByRole('button', { name: 'Set a password…' }).click()
   await page.getByLabel('New password').fill('correct horse battery')
   await page.getByRole('button', { name: 'Save password' }).click()

@@ -70,7 +70,8 @@ jobs:
     name: macOS (Apple silicon + Intel)
     needs: check
     runs-on: macos-latest
-    timeout-minutes: 60
+    # two notarizations (Apple silicon, then Intel), each allowed up to 40 minutes of Apple's time
+    timeout-minutes: 120
     env:
       HAS_CERT: ${{ secrets.MAC_CERTIFICATE != '' }}
     steps:
@@ -81,6 +82,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Fails in seconds (not after an hour) if the Apple ID, app-specific password or team ID is
+      # wrong, and lists recent submissions, so one stuck "In Progress" at Apple is visible here.
+      - name: Check the Apple notarization login
+        if: env.HAS_CERT == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool history --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" | head -40
       - name: Build (signed + notarized)
         if: env.HAS_CERT == 'true'
         env:
@@ -89,7 +100,10 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npx electron-builder --mac --publish never -c.publish.repo="$RELEASE_REPO" -c.mac.notarize=true
+          # scripts/notarize.cjs (electron-builder's afterSign hook) notarizes and staples
+          TOOM_NOTARIZE: '1'
+          NOTARIZE_TIMEOUT_MIN: '40'
+        run: npx electron-builder --mac --publish never -c.publish.repo="$RELEASE_REPO"
       - name: Build (unsigned)
         if: env.HAS_CERT != 'true'
         env:

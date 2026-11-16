@@ -14,7 +14,7 @@ export interface PlanLimits {
 }
 
 export const LIMITS: Record<PlanTier, PlanLimits> = {
-  free: { maxExportHeight: 720, maxExportFps: 30, watermark: true, maxRecordingSeconds: 5 * 60 },
+  free: { maxExportHeight: 720, maxExportFps: 30, watermark: true, maxRecordingSeconds: 2 * 60 },
   pro: { maxExportHeight: 2160, maxExportFps: 60, watermark: false, maxRecordingSeconds: null }
 }
 
@@ -49,7 +49,7 @@ export interface AccountGrant {
   endsAt: string | null
 }
 
-/** A computer using a licence key (each key has a few seats) */
+/** One of this account's computers using a licence key (each account has a few seats) */
 export interface LicenseDevice {
   /** the computer's hashed hardware ID */
   id: string
@@ -59,9 +59,22 @@ export interface LicenseDevice {
   thisComputer: boolean
 }
 
+/** A Toom account using a licence key */
+export interface LicenseAccount {
+  id: string
+  /** in full for the key's owner and for yourself; otherwise masked (t•••@example.com) */
+  email: string
+  /** the account that bought (or was given) the key */
+  owner: boolean
+  you: boolean
+  addedAt: string
+}
+
 /**
- * The licence key giving this account Pro. Each period of Pro has its own key: a subscription gets a
- * new one for every billing period, a promo code or gift gets one for as long as it lasts.
+ * The licence key giving this account Pro. A subscription has one key for its whole life: every
+ * payment moves its end date on, and if a payment doesn't go through it runs out and everyone on it
+ * is back on Free. A promo code or gift gets a key for as long as it lasts. A bought key works on
+ * two accounts at a time (the buyer plus one); whoever joins gets the time that's left.
  */
 export interface AccountLicense {
   /** XXXXX-XXXXX-XXXXX-XXXXX-XXXXX */
@@ -70,6 +83,13 @@ export interface AccountLicense {
   startsAt: string
   /** null = never */
   expiresAt: string | null
+  /** whole days left, rounded up; null = never ends (absent from older servers) */
+  daysLeft?: number | null
+  /** this account bought (or was given) the key, and can remove the other account */
+  owner?: boolean
+  maxAccounts?: number
+  accounts?: LicenseAccount[]
+  /** computers per account */
   maxDevices: number
   devices: LicenseDevice[]
   /** why this computer isn't using the key (every seat taken), or null */

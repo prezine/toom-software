@@ -13,7 +13,7 @@ type Server = { user: AccountState['user']; plan: AccountState['plan']; subscrip
 
 const publish = (a: Server | null): void => {
   state = a
-    ? { user: a.user, plan: a.plan, subscription: a.subscription, grant: (a as { grant?: AccountState["grant"] }).grant ?? null, offline: false, awaitingPayment: awaiting }
+    ? { user: a.user, plan: a.plan, subscription: a.subscription, grant: (a as { grant?: AccountState["grant"] }).grant ?? null, license: (a as { license?: AccountState["license"] }).license ?? null, offline: false, awaitingPayment: awaiting }
     : SIGNED_OUT
   changed.forEach((l) => l(state))
 }
@@ -71,7 +71,6 @@ export const accountApi = {
   get: async () => state,
   refresh,
   apiUrl: async () => '/api',
-  showSignIn: async () => undefined,
   signup: (a: object) => signedIn(call('POST', '/v1/auth/signup', a)),
   login: (a: object) => signedIn(call('POST', '/v1/auth/login', a)),
   emailStart: async (email: string, purpose = 'login'): Promise<AccountResult> => {
@@ -118,6 +117,26 @@ export const accountApi = {
     if (!r.ok) return r
     publish(r.data)
     if (was !== 'pro' && r.data.plan === 'pro') emit({ type: 'upgraded' })
+    return { ok: true, state }
+  },
+  licenseActivate: async (key: string): Promise<AccountResult> => {
+    const was = state.plan
+    const r = await call<Server>('POST', '/v1/license/activate', { key })
+    if (!r.ok) return r
+    publish(r.data)
+    if (was !== 'pro' && r.data.plan === 'pro') emit({ type: 'upgraded' })
+    return { ok: true, state }
+  },
+  licenseDeactivate: async (deviceId: string): Promise<AccountResult> => {
+    const r = await call<Server>('POST', '/v1/license/deactivate', { deviceId })
+    if (!r.ok) return r
+    publish(r.data)
+    return { ok: true, state }
+  },
+  licenseRemoveAccount: async (userId: string): Promise<AccountResult> => {
+    const r = await call<Server>('POST', '/v1/license/accounts/remove', { userId })
+    if (!r.ok) return r
+    publish(r.data)
     return { ok: true, state }
   },
   checkout: async (plan: string, code?: string): Promise<AccountResult> => {
