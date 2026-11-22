@@ -1,6 +1,8 @@
-import { app, ipcMain } from 'electron'
+import { app, ipcMain, net, protocol } from 'electron'
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
+import { MODELS_SCHEME, WHISPER_FILES, WHISPER_MODELS, type WhisperModel } from '@shared/whisper'
+import { hasModel, modelFile, prefetchModel } from './modelCache'
 
 /**
  * Small ML models used on-device. Each downloads once into the app data folder and
@@ -57,6 +59,37 @@ async function getModel(name: string): Promise<Uint8Array> {
     inflight.set(name, p)
   }
   return p
+}
+
+/** The speech models (Hugging Face files), under the same models folder: "Clear downloads" removes them too. */
+const hfRoot = (): string => join(dir(), 'hf')
+const netFetch = ((url: string) => net.fetch(url)) as typeof fetch
+
+/** toom-models://hf/<repo>/resolve/<revision>/<file>: from disk, or downloaded once and kept. */
+export function handleModelsProtocol(): void {
+  protocol.handle(MODELS_SCHEME, (req) => {
+    const url = new URL(req.url)
+    if (url.host !== 'hf') return new Response('Not found', { status: 404 })
+    return modelFile(hfRoot(), url.pathname, netFetch)
+  })
+}
+
+let prefetching: Promise<void> | null = null
+/**
+ * Download the chosen speech model in the background (once), so the first transcription doesn't
+ * wait for it. Waits while a recording is running; does nothing when the model is already here.
+ */
+export function prefetchWhisper(model: WhisperModel, busy: () => boolean): void {
+  const spec = WHISPER_MODELS[model]
+  if (!spec || prefetching) return
+  prefetching = (async () => {
+    if (await hasModel(hfRoot(), spec.id, WHISPER_FILES)) return
+    while (busy()) await new Promise((r) => setTimeout(r, 30_000))
+    const ok = await prefetchModel(hfRoot(), spec.id, WHISPER_FILES, netFetch)
+    console.log(`[models] speech model ${spec.id}: ${ok ? 'ready' : 'not complete, will finish on first use'}`)
+  })()
+    .catch((err) => console.warn('[models] prefetch failed', err))
+    .finally(() => (prefetching = null))
 }
 
 export function registerModelIpc(): void {

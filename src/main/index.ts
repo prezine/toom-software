@@ -44,7 +44,7 @@ import { buildTrayMenu, createTray } from './tray'
 import { registerGlassIpc } from './glass'
 import { registerSoundIpc } from './sounds'
 import { buildAppMenu, registerMenuIpc } from './menu'
-import { registerModelIpc } from './models'
+import { handleModelsProtocol, prefetchWhisper, registerModelIpc } from './models'
 import {
   accountLoaded,
   accountReady,
@@ -456,6 +456,7 @@ app.whenReady().then(() => {
   })
 
   handleMediaProtocol()
+  handleModelsProtocol()
   registerIpc()
   buildAppMenu()
   createTray()
@@ -472,7 +473,10 @@ app.whenReady().then(() => {
       applySystemSettings()
     }
     buildTrayMenu()
+    if (s.transcription.model !== prev.transcription.model) prefetchWhisper(s.transcription.model, isRecording)
   })
+  // the speech model downloads once, in the background, a little after launch
+  setTimeout(() => prefetchWhisper(getSettings().transcription.model, isRecording), 20_000)
 
   setAccountFocus(focusAccountUi)
   void initUpdater(isRecording)

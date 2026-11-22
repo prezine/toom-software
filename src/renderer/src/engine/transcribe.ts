@@ -5,10 +5,8 @@ import type { WorkerIn, WorkerOut } from './transcribe.worker'
 
 export const RATE = 16000
 
-export const WHISPER_MODELS = {
-  fast: { id: 'onnx-community/whisper-tiny_timestamped', label: 'Fast', size: '≈45 MB' },
-  accurate: { id: 'onnx-community/whisper-base_timestamped', label: 'Accurate', size: '≈90 MB' }
-} as const
+export { WHISPER_MODELS } from '@shared/whisper'
+import { WHISPER_MODELS } from '@shared/whisper'
 
 /** Decode the recording's audio as 16 kHz mono (streaming box-filter decimation). */
 export async function extractAudio16k(

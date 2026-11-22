@@ -5,6 +5,7 @@ import { basename, extname, join } from 'node:path'
 import { libraryDir } from './backgrounds'
 import { soundsDir } from './sounds'
 import { projectFile } from './projects'
+import { MODELS_SCHEME } from '@shared/whisper'
 
 export const MEDIA_SCHEME = 'media'
 
@@ -32,7 +33,9 @@ export function registerMediaScheme(): void {
     {
       scheme: MEDIA_SCHEME,
       privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true }
-    }
+    },
+    // speech-model files, kept on disk (see models.ts)
+    { scheme: MODELS_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
   ])
 }
 

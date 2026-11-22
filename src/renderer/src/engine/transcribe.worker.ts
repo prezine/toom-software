@@ -1,9 +1,12 @@
 /// <reference lib="webworker" />
 // Speech-to-text worker: Whisper (word timestamps) via Transformers.js, fully on-device.
-// The ONNX runtime is bundled with the app; the model downloads once and is cached.
+// The ONNX runtime is bundled with the app. The model downloads once and is kept on disk by the
+// app (toom-models://, see src/main/models.ts): the browser's own cache isn't available to an app
+// loaded from a file, which is why it used to download again for every transcription.
 import { env, pipeline } from '@huggingface/transformers'
 import ortWasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url'
 import ortMjsUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url'
+import { MODELS_SCHEME } from '@shared/whisper'
 
 export interface WorkerWord {
   text: string
@@ -31,7 +34,8 @@ const RATE = 16000
 const post = (m: WorkerOut): void => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m)
 
 env.allowLocalModels = false
-env.useBrowserCache = true
+env.useBrowserCache = false
+env.remoteHost = `${MODELS_SCHEME}://hf/`
 const onnx = env.backends.onnx as unknown as { wasm: { wasmPaths: unknown; numThreads: number } }
 onnx.wasm.wasmPaths = {
   wasm: new URL(ortWasmUrl, self.location.href).href,
