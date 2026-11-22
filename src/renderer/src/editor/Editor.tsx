@@ -252,9 +252,30 @@ export function Editor({ projectId }: { projectId: string }): React.JSX.Element 
       setBgImage(null)
       return
     }
-    const img = new Image()
-    img.onload = () => setBgImage({ source: img, w: img.naturalWidth, h: img.naturalHeight, key: bgValue })
-    img.src = mediaUrl(project.id, bgValue)
+    // Loaded as an ImageBitmap from fetch(), not an <img>: an <img> from media:// is cross-origin to the
+    // page, so drawing it "taints" the canvas. The preview and the exporter share the background layer
+    // cache (same key at 1080p), and the exporter can't make a video frame from a tainted canvas
+    // ("VideoFrames can't be created from tainted sources").
+    let cancelled = false
+    let bitmap: ImageBitmap | null = null
+    void fetch(mediaUrl(project.id, bgValue))
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`background image: HTTP ${r.status}`))))
+      .then((b) => createImageBitmap(b))
+      .then((bmp) => {
+        if (cancelled) return bmp.close()
+        bitmap = bmp
+        setBgImage({ source: bmp, w: bmp.width, h: bmp.height, key: bgValue })
+      })
+      .catch((err) => {
+        console.warn('[editor] could not load the background image', err)
+        if (!cancelled) setBgImage(null)
+      })
+    return () => {
+      cancelled = true
+      // the scene may still be drawing with it until the next render picks up the new one
+      const old = bitmap
+      if (old) setTimeout(() => old.close(), 1000)
+    }
   }, [project, bgKind, bgValue])
 
   const builder = useMemo(

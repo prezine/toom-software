@@ -187,14 +187,34 @@ export function maskAlpha(m: MaskSegment, t: number): number {
   return f <= 0 ? 1 : clamp(Math.min((t - m.start) / f, (m.end - t) / f), 0, 1)
 }
 
-let maskScratch: OffscreenCanvas | null = null
-/** reused full-frame layer for motion-blur samples of a recording that has privacy masks */
-let blurLayer: OffscreenCanvas | null = null
+/**
+ * Scratch layers, kept per destination canvas so the editor's preview and an export never share
+ * one. A canvas that has ever had a cross-origin picture drawn on it stays "tainted" for good, and
+ * an export can't turn a tainted canvas into video frames; sharing layers let one bad preview frame
+ * break every later export ("VideoFrames can't be created from tainted sources").
+ */
+interface ScratchSet {
+  /** pixelated privacy masks */
+  mask: OffscreenCanvas | null
+  /** full-frame layer for motion-blur samples of a recording that has privacy masks */
+  blur: OffscreenCanvas | null
+  /** the camera, for the cutout layout */
+  cam: OffscreenCanvas | null
+}
+const scratchSets = new WeakMap<object, ScratchSet>()
+function scratchOf(ctx: Ctx): ScratchSet {
+  const key = ctx.canvas as object
+  let s = scratchSets.get(key)
+  if (!s) scratchSets.set(key, (s = { mask: null, blur: null, cam: null }))
+  return s
+}
 
 /** One camera-blur sample, drawn opaque (with its masks) into a frame-sized layer. */
 function drawSampleLayer(ctx: Ctx, tr: ZoomTr, scene: Scene, input: FrameInputs, rect: Rect, k: number): OffscreenCanvas {
   const { width, height } = ctx.canvas
-  if (!blurLayer || blurLayer.width !== width || blurLayer.height !== height) blurLayer = new OffscreenCanvas(width, height)
+  const s = scratchOf(ctx)
+  if (!s.blur || s.blur.width !== width || s.blur.height !== height) s.blur = new OffscreenCanvas(width, height)
+  const blurLayer = s.blur
   const lc = blurLayer.getContext('2d')!
   lc.setTransform(1, 0, 0, 1, 0, 0)
   lc.clearRect(0, 0, width, height)
@@ -275,7 +295,9 @@ function drawMasks(ctx: Ctx, scene: Scene, input: FrameInputs, rect: Rect): void
         const cell = Math.max(3, (8 + 32 * m.strength) * unit)
         const cw = Math.max(1, Math.ceil(dw / cell))
         const ch = Math.max(1, Math.ceil(dh / cell))
-        if (!maskScratch) maskScratch = new OffscreenCanvas(cw, ch)
+        const scr = scratchOf(ctx)
+        if (!scr.mask) scr.mask = new OffscreenCanvas(cw, ch)
+        const maskScratch = scr.mask
         if (maskScratch.width < cw || maskScratch.height < ch) {
           maskScratch.width = Math.max(maskScratch.width, cw)
           maskScratch.height = Math.max(maskScratch.height, ch)
@@ -516,8 +538,6 @@ function coverDraw(
   } else ctx.drawImage(src, sx, sy, cw, ch, r.x, r.y, r.w, r.h)
 }
 
-let scratch: OffscreenCanvas | null = null
-
 function drawCamera(ctx: Ctx, g: Geo, scene: Scene, input: FrameInputs, k: number): void {
   if (g.camAlpha < 0.01 || g.cam.w < 2 || g.cam.h < 2) return
   const { cam } = g
@@ -563,7 +583,9 @@ function drawCamera(ctx: Ctx, g: Geo, scene: Scene, input: FrameInputs, k: numbe
   if (cut > 0.01 && mask) {
     const w = Math.max(2, Math.round(cam.w))
     const h = Math.max(2, Math.round(cam.h))
-    if (!scratch || scratch.width !== w || scratch.height !== h) scratch = new OffscreenCanvas(w, h)
+    const scr = scratchOf(ctx)
+    if (!scr.cam || scr.cam.width !== w || scr.cam.height !== h) scr.cam = new OffscreenCanvas(w, h)
+    const scratch = scr.cam
     const sc = scratch.getContext('2d')!
     sc.globalCompositeOperation = 'source-over'
     sc.clearRect(0, 0, w, h)
@@ -628,11 +650,11 @@ export function renderFrame(ctx: Ctx, W: number, H: number, scene: Scene, input:
       if (i > 0 && edit.masks.length) {
         // A see-through sample would let a mask's partial alpha leak the text under it (screen at α,
         // then the mask at α leaves α(1−α) of the original). Draw it opaque, masks and all, then blend.
-        blurLayer = drawSampleLayer(ctx, tr, scene, input, rect, k)
+        const layer = drawSampleLayer(ctx, tr, scene, input, rect, k)
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.globalAlpha = alpha
-        ctx.drawImage(blurLayer, 0, 0)
+        ctx.drawImage(layer, 0, 0)
         ctx.restore()
         return
       }
